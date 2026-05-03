@@ -1,0 +1,14 @@
+[project]
+name = "terrarium-sim"
+version = "0.1.0"
+description = "A terminal-first closed terrarium ecosystem simulation game."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+terrarium = "terrarium.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
