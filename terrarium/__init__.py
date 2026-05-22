@@ -1,5 +1,15 @@
 """Terminal-first terrarium ecosystem simulation."""
 
-from .model import SimulationConfig, Terrarium, TerrariumState
+from .model import CONTAINERS, ContainerDefinition, ContainerSpec, HardscapeItem, Planting, SimulationConfig, SubstrateLayer, Terrarium, TerrariumState
 
-__all__ = ["SimulationConfig", "Terrarium", "TerrariumState"]
+__all__ = [
+    "CONTAINERS",
+    "ContainerDefinition",
+    "ContainerSpec",
+    "HardscapeItem",
+    "Planting",
+    "SimulationConfig",
+    "SubstrateLayer",
+    "Terrarium",
+    "TerrariumState",
+]

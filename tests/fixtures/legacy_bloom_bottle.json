@@ -1,0 +1,118 @@
+{
+  "tick": 3135,
+  "hour": 15,
+  "light": 0.6081118318204309,
+  "temperature": 23.664394086964936,
+  "water": 0.8639433096773647,
+  "nutrients": 0.0,
+  "oxygen": 0.958505373135719,
+  "carbon_dioxide": 0.0697363757690252,
+  "detritus": 0.40706750956935633,
+  "toxicity": 0.0,
+  "plants": 0.00009992202452059455,
+  "algae": 1542.1626880315116,
+  "grazers": 42.43100138361136,
+  "microbes": 136.44480921210786,
+  "soil_moistened_ml": 30.0,
+  "sprayed_ml": 4.0,
+  "spray_count": 5,
+  "mesh_barrier": true,
+  "sealed": true,
+  "sealed_tick": 0,
+  "seed": 1,
+  "events": ["NUTRIENT_LIMIT", "PLANT_COLLAPSE"],
+  "container": {
+    "key": "standard_1l",
+    "display_name": "Standard 1L upright jar",
+    "capacity_ml": 1000.0,
+    "height_cm": 16.7,
+    "diameter_cm": 9.3,
+    "length_cm": 9.3,
+    "width_cm": 9.3,
+    "footprint_shape": "round",
+    "external_base_area_cm2": 67.92956723547817,
+    "base_area_cm2": 59.880239520958085
+  },
+  "substrate_layers": [
+    {
+      "layer_kind": "drainage",
+      "height_cm": 2.0,
+      "portions": [
+        {"substrate": "leca", "percent": 70.0},
+        {"substrate": "pumice", "percent": 30.0}
+      ]
+    },
+    {
+      "layer_kind": "mesh",
+      "height_cm": 0.0,
+      "portions": [
+        {"substrate": "mesh_screen", "percent": 100.0}
+      ]
+    },
+    {
+      "layer_kind": "soil",
+      "height_cm": 4.0,
+      "portions": [
+        {"substrate": "peat_moss", "percent": 50.0},
+        {"substrate": "compost", "percent": 30.0},
+        {"substrate": "perlite", "percent": 20.0}
+      ]
+    }
+  ],
+  "plantings": [
+    {
+      "planting_id": "P01",
+      "plant": "fittonia_mini",
+      "area_percent": 5.0,
+      "site": "surface",
+      "health": 0.0,
+      "status": "dead",
+      "survival_state": "dead",
+      "growth_stage": "dead",
+      "growth_rate": 0.0,
+      "age_ticks": 516,
+      "x_percent": 50.0,
+      "y_percent": 50.0,
+      "footprint_cm2": 2.9940119760479043,
+      "height_cm": 8.0,
+      "root_length_cm": 2.0
+    },
+    {
+      "planting_id": "P02",
+      "plant": "cushion_moss",
+      "area_percent": 10.0,
+      "site": "surface",
+      "health": 0.0,
+      "status": "dead",
+      "survival_state": "dead",
+      "growth_stage": "dead",
+      "growth_rate": 0.0,
+      "age_ticks": 252,
+      "x_percent": 50.0,
+      "y_percent": 50.0,
+      "footprint_cm2": 5.988023952095808,
+      "height_cm": 3.0,
+      "root_length_cm": 0.0
+    }
+  ],
+  "animal_groups": [
+    {
+      "group_id": "A01",
+      "animal": "springtail",
+      "count": 1,
+      "site": "soil",
+      "survival_state": "thriving",
+      "population_trend": "growing",
+      "growth_rate": 0.01766,
+      "mortality_pressure": 0.1533,
+      "age_ticks": 3135
+    }
+  ],
+  "flux": {
+    "photosynthesis": 1.288,
+    "respiration": 3.524,
+    "grazing": 1.453,
+    "decay": 0.435,
+    "stress": 6.452
+  }
+}

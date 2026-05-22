@@ -7,7 +7,32 @@
 ## 快速开始
 
 ```powershell
-python -m terrarium run --ticks 168 --interval 24
+terrarium
+```
+
+Install the OS command from the project folder:
+
+```powershell
+.\scripts\install-command.ps1
+```
+
+After installing, players can start the game with `terrarium`; no Python module path is needed.
+The installer adds the command directory to the user `PATH`, so `terrarium`
+works from any folder after opening a new terminal.
+Batch simulation is still available with `terrarium run ...`.
+The default `terrarium` entry opens a small terminal game panel; use `status`
+inside the shell for the full simulation dashboard.
+
+To create a standalone Windows executable:
+
+```powershell
+.\scripts\build-windows-exe.ps1
+```
+
+The bundled game will be written to `dist\terrarium.exe`.
+
+```powershell
+terrarium run --ticks 168 --interval 24
 ```
 
 输出会显示一个终端仪表盘：
@@ -23,25 +48,25 @@ SOIL  H2O [###############.....] 0.741   NUT [############........] 0.575
 批处理运行一周：
 
 ```powershell
-python -m terrarium run --ticks 168 --interval 12
+terrarium run --ticks 168 --interval 12
 ```
 
 输出紧凑日志，适合重定向分析：
 
 ```powershell
-python -m terrarium run --ticks 240 --log --interval 6 --seed 42
+terrarium run --ticks 240 --log --interval 6 --seed 42
 ```
 
 导出每小时快照：
 
 ```powershell
-python -m terrarium run --ticks 240 --export sim.jsonl
+terrarium run --ticks 240 --export sim.jsonl
 ```
 
 进入交互式模拟器：
 
 ```powershell
-python -m terrarium shell --seed 42
+terrarium --seed 42
 ```
 
 交互式命令：
@@ -54,7 +79,15 @@ set water 0.82
 set light_intensity 0.65
 add grazers 3
 save state.json
+source recipe.txt
 quit
+```
+
+You can paste several command lines into the shell. They will run in order.
+One line can also contain several commands separated by `;`, for example:
+
+```text
+moisten 30ml; spray 5; seal
 ```
 
 ## 模型概要
