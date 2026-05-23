@@ -2,6 +2,8 @@
 
 [中文](#中文) | [English](#english)
 
+User guides: [中文用户指南](docs/user-guide.zh-CN.md) | [English User Guide](docs/user-guide.en.md)
+
 ## 中文
 
 Terrarium Simulation 是一个终端优先的封闭生态瓶制作与模拟游戏。玩家先像真实制作生态瓶一样选择容器、铺基质、放纱网、润湿土壤、摆放石头或沉木、种植物、加入小型动物，最后封瓶。封瓶后，系统会按照游戏时间自动运行，并输出可观察到的生态变化。
