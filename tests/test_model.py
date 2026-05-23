@@ -76,6 +76,36 @@ class TerrariumModelTests(unittest.TestCase):
         sim.seal()
         return sim
 
+    def _build_stable_umbrella_recipe(self) -> Terrarium:
+        sim = Terrarium(config=SimulationConfig(noise=0.0), seed=1)
+        sim.set_container("wide_jar")
+        sim.set_window("east")
+        sim.set_window_facing(90)
+        sim.set_umbrella(125, "center", "leaning_west")
+        sim.set_moss_lamp(230, 0.18)
+        sim.set_moss_lamp_schedule(18, 3)
+        sim.add_substrate("drainage", 1.6, {"leca": 70, "pumice": 30}, slope_x_cm=0.2, slope_y_cm=-0.1)
+        sim.install_mesh_barrier()
+        sim.add_substrate(
+            "soil",
+            4.0,
+            {"peat_moss": 45, "compost": 20, "sphagnum_moss": 20, "perlite": 15},
+            slope_x_cm=0.5,
+            slope_y_cm=-0.2,
+        )
+        sim.add_substrate("amendment", 0.5, {"akadama": 50, "perlite": 30, "kanuma": 20}, slope_x_cm=0.3, slope_y_cm=-0.1)
+        sim.moisten_soil(72)
+        sim.spray(5)
+        sim.place_hardscape("driftwood", 10, "center", "arch", x_percent=48, y_percent=55, angle_deg=35, tilt_deg=14)
+        sim.add_planting("cushion_moss", 7, "surface", 45, 68)
+        sim.add_planting("sheet_moss", 5, "hardscape:H01:groove")
+        sim.add_planting("fittonia_mini", 5, "surface", 35, 36)
+        sim.add_planting("fittonia_white", 5, "surface", 58, 38)
+        sim.add_animals("springtail", 32, "soil", 48, 52)
+        sim.add_animals("dwarf_white_isopod", 6, "leaf_litter", 56, 56)
+        sim.seal()
+        return sim
+
     def _build_carnivorous_bog_recipe(self) -> Terrarium:
         sim = Terrarium(config=SimulationConfig(noise=0.0), seed=13)
         sim.set_container("wide_jar")
@@ -1282,6 +1312,16 @@ class TerrariumModelTests(unittest.TestCase):
         self.assertLess(sim.state.carbon_dioxide, 0.70)
         self.assertGreater(sim.state.water, 0.38)
         self.assertNotIn("GRAZER_LOSS", sim.state.events)
+
+    def test_stable_umbrella_recipe_remains_observable_for_three_months(self) -> None:
+        sim = self._build_stable_umbrella_recipe()
+
+        sim.run(2160)
+
+        self.assertGreaterEqual(sim.living_planting_count(), 3)
+        self.assertGreaterEqual(sim.living_animal_count(), 30)
+        self.assertGreaterEqual(sim.stability_score(), 60)
+        self.assertNotIn("O2_CRASH", sim.state.events)
 
     def test_balanced_fittonia_recipe_uses_nutrients_without_rot_bloom(self) -> None:
         sim = self._build_balanced_fittonia_recipe()

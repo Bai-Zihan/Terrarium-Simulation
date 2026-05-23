@@ -1924,6 +1924,21 @@ class Terrarium:
             "diet": diet,
         }
 
+    def _decomposer_activity_signal(self) -> float:
+        if not self.state.animal_groups:
+            return 0.0
+        activity = 0.0
+        for group in self.state.animal_groups:
+            if group.count <= 0 or group.survival_state == "dead":
+                continue
+            definition = ANIMALS[group.animal]
+            if definition.role not in {"decomposer", "micro_consumer"}:
+                continue
+            activity += (group.count ** 0.5) * definition.detritus_processing * definition.feeding_rate
+        moisture_factor = clamp(self.state.water / 0.58)
+        oxygen_factor = clamp(self.state.oxygen / 0.42)
+        return clamp(activity / 5.5 * moisture_factor * oxygen_factor)
+
     def _animal_food_availability(self, diet: dict[str, float]) -> dict[str, float]:
         s = self.state
         raw_food = {
@@ -1955,6 +1970,7 @@ class Terrarium:
         temp_factor = self._temperature_factor(s.temperature)
         plant_profile = self._plant_resource_profile()
         animal_profile = self._animal_resource_profile()
+        decomposer_signal = self._decomposer_activity_signal()
         water_resource = clamp(s.water / max(0.10, 0.70 * float(plant_profile["water_use_rate"])))
         nutrient_resource = clamp(s.nutrients / max(0.08, 0.52 * float(plant_profile["nutrient_demand"])))
         plant_resource_factor = max(0.0, min(water_resource, nutrient_resource, s.carbon_dioxide))
@@ -2008,6 +2024,14 @@ class Terrarium:
             * clamp(s.oxygen * 1.4)
             * clamp(0.35 + s.water * 0.95)
         )
+        decay_capacity += (
+            s.detritus
+            * decomposer_signal
+            * 0.0080
+            * temp_factor
+            * clamp(s.oxygen * 1.25)
+            * clamp(0.35 + s.water * 0.95)
+        )
         decay = min(s.detritus, decay_capacity)
 
         planting_pressure = max(0.0, s.plants - effective_capacity * 0.74) / max(1.0, effective_capacity)
@@ -2026,7 +2050,7 @@ class Terrarium:
         algae_growth = algae_photo * 7.2
         assimilation_multiplier = clamp(float(animal_profile["assimilation_efficiency"]) / 0.42, 0.35, 1.45)
         grazer_growth = grazing * 0.48 * clamp(s.oxygen * 1.2) * assimilation_multiplier
-        microbe_growth = decay * 1.55
+        microbe_growth = decay * (1.55 + decomposer_signal * 0.45)
 
         s.plants += plant_growth - eaten_plants - s.plants * plant_stress
         s.algae += algae_growth - eaten_algae - s.algae * algae_stress
@@ -2061,13 +2085,18 @@ class Terrarium:
         s.oxygen += (photosynthesis * 0.115 - respiration * 0.034 - decay * 0.012) * air_sensitivity
         s.carbon_dioxide += (respiration * 0.031 + decay * 0.014 - photosynthesis * 0.105) * air_sensitivity
         self._apply_waterlogged_gas_pressure()
-        s.toxicity += (s.detritus - 0.55) * 0.002 if s.detritus > 0.55 else -0.002
+        detoxification = decomposer_signal * 0.00045 + decay * 0.003 + max(0.0, s.oxygen - 0.45) * 0.00060
+        if s.detritus > 0.62:
+            s.toxicity += max(0.0, s.detritus - 0.62) * 0.0014 - detoxification
+        else:
+            s.toxicity -= 0.0022 + detoxification
         self._advance_visible_ecology(grazing, decay)
 
         self._apply_small_random_drift()
         self._clamp_state()
         self._advance_living_records()
         self._apply_local_ecological_interactions()
+        self._reconcile_living_plant_biomass()
         self._clamp_state()
         self._collect_events(events)
 
@@ -2336,21 +2365,7 @@ class Terrarium:
 
     def _synchronize_crafted_biomass(self) -> None:
         s = self.state
-        base_area = max(s.container.base_area_cm2, 1.0)
-
-        plant_biomass = 0.0
-        for planting in s.plantings:
-            if planting.status == "dead" or planting.health <= 0.0:
-                continue
-            definition = PLANTS[planting.plant]
-            footprint = planting.footprint_cm2 or base_area * planting.area_percent / 100.0
-            planted_percent = footprint / base_area * 100.0
-            height_factor = clamp(definition.height_cm / 18.0, 0.08, 1.25)
-            root_factor = clamp((planting.root_mass_percent / 100.0) * (1.0 - planting.root_pruned_percent / 140.0), 0.18, 1.0)
-            health_factor = clamp(planting.health / 100.0, 0.10, 1.0)
-            epiphyte_factor = 0.86 if planting.attached_to else 1.0
-            plant_biomass += planted_percent * (1.45 + height_factor * 0.50) * root_factor * health_factor * epiphyte_factor
-        s.plants = max(0.0, min(140.0, plant_biomass))
+        s.plants = max(0.0, min(140.0, self._planting_biomass_estimate()))
 
         hardscape = self.hardscape_profile()
         wet_visible = clamp(s.surface_wetness * 0.58 + s.water * 0.26 + clamp(s.condensation_ml / 6.0) * 0.16)
@@ -2379,6 +2394,35 @@ class Terrarium:
         organic_signal = self._crafted_organic_signal()
         s.microbes = max(1.5, min(44.0, 5.0 + organic_signal * 23.0 + s.detritus * 7.0 + wet_visible * 4.0))
         s.detritus = clamp(0.10 + organic_signal * 0.20 + s.leaf_litter_cover * 0.12 + s.detritus * 0.35)
+
+    def _planting_biomass_estimate(self) -> float:
+        s = self.state
+        base_area = max(s.container.base_area_cm2, 1.0)
+        plant_biomass = 0.0
+        for planting in s.plantings:
+            if planting.status == "dead" or planting.health <= 0.0:
+                continue
+            definition = PLANTS[planting.plant]
+            footprint = planting.footprint_cm2 or base_area * planting.area_percent / 100.0
+            planted_percent = footprint / base_area * 100.0
+            height_factor = clamp(definition.height_cm / 18.0, 0.08, 1.25)
+            root_factor = clamp((planting.root_mass_percent / 100.0) * (1.0 - planting.root_pruned_percent / 140.0), 0.18, 1.0)
+            health_factor = clamp(planting.health / 100.0)
+            epiphyte_factor = 0.86 if planting.attached_to else 1.0
+            plant_biomass += planted_percent * (1.45 + height_factor * 0.50) * root_factor * health_factor * epiphyte_factor
+        return plant_biomass
+
+    def _reconcile_living_plant_biomass(self) -> None:
+        if not self.state.sealed or not self.state.plantings:
+            return
+        target = self._planting_biomass_estimate()
+        if target <= 0.0:
+            return
+        floor = target * 0.42
+        if self.state.plants < floor:
+            self.state.plants = floor
+        else:
+            self.state.plants += (target - self.state.plants) * 0.10
 
     def _crafted_organic_signal(self) -> float:
         s = self.state
@@ -5450,12 +5494,19 @@ class Terrarium:
             planting.growth_stage = "dividable"
 
     def _apply_plant_mortality(self, planting: Planting, suitability: float, env: dict[str, float]) -> None:
+        definition = PLANTS[planting.plant]
         stress = 0.0
         stress += max(0.0, 0.44 - suitability) * 2.4
         stress += max(0.0, 0.18 - env["oxygen"]) * 1.4
         stress += max(0.0, env["carbon_dioxide"] - 0.86) * 0.6
         stress += max(0.0, env["toxicity"] - 0.38) * 1.8
-        stress += env.get("local_overlap", 0.0) * 0.34
+        overlap = env.get("local_overlap", 0.0)
+        overlap_tolerance = 0.22
+        if definition.category in {"moss", "lichen", "creeper"}:
+            overlap_tolerance = 0.38
+        elif definition.category in {"epiphytic_fern", "bromeliad_air", "orchid_mini"}:
+            overlap_tolerance = 0.30
+        stress += max(0.0, overlap - overlap_tolerance) * 0.16
         stress += max(0.0, 0.30 - env.get("root_zone_oxygen", 1.0)) * 1.2
         stress += max(0.0, 35.0 - planting.root_health) * 0.012
         stress += max(0.0, env.get("lowland", 0.5) - 0.78) * max(0.0, 3.5 - env["aeration"]) * 0.09
@@ -5921,16 +5972,18 @@ class Terrarium:
             count_signal = max(1.0, group.count ** 0.5)
 
             if definition.detritus_processing > 0.0:
-                processing = definition.detritus_processing * activity * count_signal * 0.00075
-                s.detritus = max(0.0, s.detritus - processing * 0.34)
-                s.leaf_litter_cover = max(0.0, s.leaf_litter_cover - processing * 0.72)
+                processing = definition.detritus_processing * activity * count_signal * 0.00220
+                s.detritus = max(0.0, s.detritus - processing * 0.42)
+                s.leaf_litter_cover = max(0.0, s.leaf_litter_cover - processing * 0.85)
+                s.microbes += processing * 0.10
 
             if definition.mold_control > 0.0:
                 mold_grazing = definition.mold_control * activity * count_signal * 0.00095
                 s.mold_pressure = max(0.0, s.mold_pressure - mold_grazing)
 
-            if definition.role in {"micro_consumer", "small_consumer"}:
-                film_grazing = (0.30 + definition.mold_control) * activity * count_signal * 0.0011
+            biofilm_weight = dict(definition.diet_weights).get("biofilm", 0.0)
+            if biofilm_weight > 0.0:
+                film_grazing = biofilm_weight * (0.30 + definition.mold_control) * activity * count_signal * 0.0014
                 s.biofilm = max(0.0, s.biofilm - film_grazing)
 
             food_score = self._animal_food_score(definition, env)
