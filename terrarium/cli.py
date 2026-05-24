@@ -410,10 +410,7 @@ class SurvivalManager:
         completed_days = self.completed_days(sim)
         if completed_days > bottle.last_reported_day:
             bottle.last_reported_day = completed_days
-            messages.append(self._daily_marker_message(prefix, bottle, completed_days, sim))
-            summary = self._daily_life_summary(sim)
-            if summary:
-                messages.append(f"{prefix} - DAILY: {summary}")
+            messages.append(self._daily_message(prefix, bottle, completed_days, sim))
 
         current_events = set(state.events)
         for event in sorted(current_events - bottle.last_events):
@@ -493,7 +490,7 @@ class SurvivalManager:
         bottle.report_variant_counts[key] = index + 1
         return variants[index % len(variants)]
 
-    def _daily_marker_message(
+    def _daily_message(
         self,
         prefix: str,
         bottle: ManagedBottle,
@@ -511,6 +508,9 @@ class SurvivalManager:
                 f"{completed_days} day(s) sealed; {observation}",
             ],
         )
+        life_summary = self._daily_life_summary(sim)
+        if life_summary:
+            text = f"{text} | {life_summary}"
         return f"{prefix} - DAILY: {text}"
 
     def _event_message(self, bottle: ManagedBottle, event: str) -> str:
@@ -836,28 +836,90 @@ class SurvivalManager:
         return f"{prefix} - FAUNA: {label}: {text}"
 
     def _daily_life_summary(self, sim: Terrarium) -> str:
-        parts: list[str] = []
-        living_plants = [planting for planting in sim.state.plantings if planting.survival_state != "dead"]
-        if living_plants:
-            snippets = []
-            for planting in living_plants[:2]:
+        sections: list[str] = []
+        if sim.state.plantings:
+            plant_notes: list[str] = []
+            for planting in sorted(sim.state.plantings, key=self._plant_daily_priority, reverse=True):
                 definition = PLANTS[planting.plant]
-                snippets.append(f"{definition.display_name}: {self._short_plant_observation(planting)}")
-            if len(living_plants) > 2:
-                snippets.append(f"+{len(living_plants) - 2} more")
-            parts.append("plant notes: " + "; ".join(snippets))
-        living_animals = [group for group in sim.state.animal_groups if group.count > 0 and group.survival_state != "dead"]
-        if living_animals:
-            snippets = []
-            for group in living_animals[:2]:
+                plant_notes.append(f"{definition.display_name}: {self._short_plant_observation(planting)}")
+            sections.append("plant changes: " + "; ".join(plant_notes))
+        if sim.state.animal_groups:
+            animal_notes: list[str] = []
+            for group in sorted(sim.state.animal_groups, key=self._animal_daily_priority, reverse=True):
                 definition = ANIMALS[group.animal]
-                snippets.append(f"{definition.display_name}: {self._short_animal_observation(group)}")
-            if len(living_animals) > 2:
-                snippets.append(f"+{len(living_animals) - 2} more")
-            parts.append("animal notes: " + "; ".join(snippets))
-        return " | ".join(parts)
+                animal_notes.append(f"{definition.display_name}: {self._short_animal_observation(group)}")
+            sections.append("animal changes: " + "; ".join(animal_notes))
+        return " | ".join(sections)
+
+    def _plant_daily_priority(self, planting) -> float:
+        priority = 0.0
+        if planting.survival_state == "dead" or planting.status == "dead":
+            priority += 130.0
+        if planting.offspring_potential > 0:
+            priority += 120.0
+        if planting.reproduction_progress >= 70.0:
+            priority += 90.0
+        elif planting.reproduction_progress >= 35.0:
+            priority += 45.0
+        if planting.growth_stage in {"dividable", "reproductive"}:
+            priority += 70.0
+        elif planting.growth_stage in {"growing", "mature"}:
+            priority += 35.0
+        priority += min(30.0, planting.new_growth_count * 5.0)
+        if planting.survival_state in {"stressed", "declining"}:
+            priority += 25.0
+        return priority
+
+    def _animal_daily_priority(self, group) -> float:
+        priority = 0.0
+        if group.count <= 0 or group.survival_state == "dead":
+            priority += 130.0
+        if group.population_trend == "reproducing":
+            priority += 110.0
+        elif group.population_trend == "growing":
+            priority += 75.0
+        elif group.population_trend in {"declining", "crowded"}:
+            priority += 55.0
+        elif group.population_trend == "stalled":
+            priority += 35.0
+        if group.survival_state in {"stressed", "declining"}:
+            priority += 45.0
+        priority += min(25.0, group.visible_activity / 4.0)
+        return priority
 
     def _short_plant_observation(self, planting) -> str:
+        definition = PLANTS[planting.plant]
+        mode = definition.reproduction_mode
+        if planting.survival_state == "dead" or planting.status == "dead":
+            return "no living tissue remains"
+        if planting.offspring_potential > 0:
+            if mode in {"mat_spread", "fragment_spread", "runner_spread"}:
+                return "a new separate edge is visible beyond the original patch"
+            if mode in {"rhizome_division", "division"}:
+                return "a side crown has its own visible outline"
+            if mode in {"pups", "offset_or_seed"}:
+                return "a small offset is visible beside the crown"
+            return "a distinct new growth point can be picked out"
+        if planting.reproduction_progress >= 70.0:
+            if mode in {"mat_spread", "fragment_spread", "runner_spread"}:
+                return "the edge is creeping into nearby open surface"
+            if mode in {"rhizome_division", "division"}:
+                return "a secondary crown is becoming distinct"
+            if mode in {"pups", "offset_or_seed"}:
+                return "the crown edge shows a small new point"
+            return "new growth points are becoming easier to spot"
+        if planting.growth_stage == "reproductive":
+            return "side points are visible around the established growth"
+        if planting.growth_stage == "dividable":
+            return "one piece reads as a separable clump"
+        if planting.growth_stage == "mature":
+            return "the outline looks denser than the original planting"
+        if planting.growth_stage == "growing":
+            if planting.new_growth_count >= 3:
+                return "several fresh tips are visible"
+            return "fresh tips are visible"
+        if planting.growth_stage == "establishing":
+            return "the base is still seating into the surface"
         if planting.survival_state == "thriving":
             return "fresh and upright"
         if planting.survival_state == "settling":
@@ -871,16 +933,22 @@ class SurvivalManager:
         return planting.survival_state
 
     def _short_animal_observation(self, group) -> str:
+        if group.count <= 0 or group.survival_state == "dead":
+            return "no visible movement remains"
+        if group.population_trend == "reproducing":
+            return "tiny young are visible in sheltered damp pockets"
         if group.population_trend in {"growing", "reproducing"}:
-            return "more activity visible"
+            return "the visible activity band has widened"
         if group.population_trend == "steady":
-            return "regular activity"
+            if group.visible_activity >= 60.0:
+                return "regular movement is easy to spot"
+            return "regular activity remains visible"
         if group.population_trend == "stalled":
-            return "quiet pockets"
+            return "the usual pockets look quiet"
         if group.population_trend == "crowded":
-            return "clustered tightly"
+            return "individuals are clustered tightly in limited shelters"
         if group.population_trend == "declining":
-            return "harder to spot"
+            return "movement is harder to spot than before"
         return group.population_trend
 
     def _stability_observation(self, sim: Terrarium) -> str:
@@ -944,6 +1012,18 @@ def normalized_source_path(path: Path) -> str:
         return str(path.resolve())
     except OSError:
         return str(path.absolute())
+
+
+def bottle_state_fingerprint(sim: Terrarium) -> str:
+    return sim.state.to_json()
+
+
+def matching_bottle_by_state(manager: SurvivalManager, sim: Terrarium) -> ManagedBottle | None:
+    fingerprint = bottle_state_fingerprint(sim)
+    for bottle in manager._bottles:
+        if bottle_state_fingerprint(bottle.sim) == fingerprint:
+            return bottle
+    return None
 
 
 def default_import_dirs(game_state_path: Path) -> list[Path]:
@@ -1011,6 +1091,11 @@ def load_game_state(manager: SurvivalManager, path: Path) -> int:
         if not sim.state.sealed:
             continue
         source_path = str(entry.get("source", ""))
+        duplicate = matching_bottle_by_state(manager, sim)
+        if duplicate is not None:
+            if source_path and not duplicate.source_path:
+                duplicate.source_path = source_path
+            continue
         bottle = manager.register(sim, str(entry.get("name", "")), source_path)
         desired_running = bool(entry.get("running", bottle.running))
         if not desired_running or bottle.dead:
@@ -1035,6 +1120,12 @@ def import_standalone_bottle_saves(manager: SurvivalManager, game_state_path: Pa
                 continue
             sim = load_standalone_bottle(path)
             if sim is None:
+                continue
+            duplicate = matching_bottle_by_state(manager, sim)
+            if duplicate is not None:
+                if not duplicate.source_path:
+                    duplicate.source_path = source
+                skipped_sources.add(source)
                 continue
             bottle = manager.register(sim, path.stem, source)
             skipped_sources.add(source)
@@ -1303,11 +1394,17 @@ def command_shell(args: argparse.Namespace) -> int:
                     elif command == "save":
                         if len(parts) != 2:
                             raise ValueError("usage: save <path>")
-                        target = sim or first_managed_sim(manager)
+                        managed_bottle = None if sim is not None else first_managed_bottle(manager)
+                        target = sim or (managed_bottle.sim if managed_bottle is not None else None)
                         if target is None:
                             print_command_notice("there is no terrarium to save.", "Use make [name] to start crafting.")
                             continue
-                        Path(parts[1]).write_text(target.state.to_json() + "\n", encoding="utf-8")
+                        save_path = Path(parts[1])
+                        save_path.write_text(target.state.to_json() + "\n", encoding="utf-8")
+                        if managed_bottle is not None:
+                            source = normalized_source_path(save_path)
+                            managed_bottle.source_path = source
+                            manager._deleted_sources.discard(source)
                         print(f"saved {parts[1]}")
                     else:
                         print(f"Nothing changed: unknown command '{command}'. Type 'help' to see available commands.")
@@ -1489,9 +1586,14 @@ def has_crafting_content(sim: Terrarium) -> bool:
 
 
 def first_managed_sim(manager: SurvivalManager) -> Terrarium | None:
+    bottle = first_managed_bottle(manager)
+    return bottle.sim if bottle is not None else None
+
+
+def first_managed_bottle(manager: SurvivalManager) -> ManagedBottle | None:
     if not manager._bottles:
         return None
-    return manager._bottles[0].sim
+    return manager._bottles[0]
 
 
 def parse_height(value: str, container_height_cm: float) -> float:

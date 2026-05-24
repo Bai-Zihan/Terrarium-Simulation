@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import unittest
 from contextlib import redirect_stdout
@@ -261,6 +262,95 @@ class CliParserTests(unittest.TestCase):
         third_text = third_output.getvalue()
         self.assertNotIn("Imported 1 standalone bottle save(s)", third_text)
         self.assertIn("BOTTLES running 0/0", third_text)
+
+    def test_exported_managed_bottle_is_not_imported_as_duplicate(self) -> None:
+        with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            home_dir = Path(temp_dir) / "home"
+            import_dir = Path(temp_dir) / "imports"
+            import_dir.mkdir()
+            export_path = import_dir / "again.json"
+            env = {"TERRARIUM_HOME": str(home_dir), "TERRARIUM_IMPORT_DIR": str(import_dir)}
+
+            first_inputs = iter(["make stable", "plant add fittonia_mini 5%", "seal", "quit"])
+            first_output = io.StringIO()
+            with (
+                patch.dict(os.environ, env),
+                patch("builtins.input", lambda prompt="": next(first_inputs)),
+                redirect_stdout(first_output),
+            ):
+                first_exit = command_shell(build_parser().parse_args([]))
+
+            second_inputs = iter([f"save {export_path}", "quit"])
+            second_output = io.StringIO()
+            with (
+                patch.dict(os.environ, env),
+                patch("builtins.input", lambda prompt="": next(second_inputs)),
+                redirect_stdout(second_output),
+            ):
+                second_exit = command_shell(build_parser().parse_args([]))
+
+            third_inputs = iter(["bottles", "quit"])
+            third_output = io.StringIO()
+            with (
+                patch.dict(os.environ, env),
+                patch("builtins.input", lambda prompt="": next(third_inputs)),
+                redirect_stdout(third_output),
+            ):
+                third_exit = command_shell(build_parser().parse_args([]))
+
+        self.assertEqual(first_exit, 0)
+        self.assertEqual(second_exit, 0)
+        self.assertEqual(third_exit, 0)
+        self.assertIn("saved", second_output.getvalue())
+        third_text = third_output.getvalue()
+        self.assertIn("Loaded 1 saved terrarium(s)", third_text)
+        self.assertNotIn("Imported 1 standalone bottle save(s)", third_text)
+        self.assertIn("BOTTLES running 1/1", third_text)
+        self.assertNotIn("B02", third_text)
+
+    def test_duplicate_saved_bottle_entries_are_collapsed_on_load(self) -> None:
+        with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            home_dir = Path(temp_dir) / "home"
+            import_dir = Path(temp_dir) / "imports"
+            home_dir.mkdir()
+            import_dir.mkdir()
+            export_path = import_dir / "again.json"
+            sim = Terrarium(seed=7)
+            sim.add_planting("fittonia_mini", 5.0)
+            sim.seal()
+            state = json.loads(sim.state.to_json())
+            export_path.write_text(sim.state.to_json() + "\n", encoding="utf-8")
+            game_state = {
+                "version": 1,
+                "deleted_sources": [],
+                "bottles": [
+                    {"name": "stable_umbrella_test", "running": True, "source": "", "state": state},
+                    {
+                        "name": "again",
+                        "running": True,
+                        "source": str(export_path.resolve()),
+                        "state": state,
+                    },
+                ],
+            }
+            (home_dir / "game.json").write_text(json.dumps(game_state), encoding="utf-8")
+            env = {"TERRARIUM_HOME": str(home_dir), "TERRARIUM_IMPORT_DIR": str(import_dir)}
+            inputs = iter(["bottles", "quit"])
+            output = io.StringIO()
+            with (
+                patch.dict(os.environ, env),
+                patch("builtins.input", lambda prompt="": next(inputs)),
+                redirect_stdout(output),
+            ):
+                exit_code = command_shell(build_parser().parse_args([]))
+
+        self.assertEqual(exit_code, 0)
+        text = output.getvalue()
+        self.assertIn("Loaded 1 saved terrarium(s)", text)
+        self.assertNotIn("Imported 1 standalone bottle save(s)", text)
+        self.assertIn("BOTTLES running 1/1", text)
+        self.assertIn("B01 stable_umbrella_test", text)
+        self.assertNotIn("B02", text)
 
     def test_shell_home_draws_small_terminal_interface(self) -> None:
         sim = Terrarium(seed=1)
@@ -869,6 +959,65 @@ class CliParserTests(unittest.TestCase):
         self.assertIn("fresh tips are visible", text)
         self.assertIn("new growth points", text)
         self.assertIn("new tiny young", text)
+
+    def test_daily_summary_reports_visible_growth_without_internal_numbers(self) -> None:
+        sim = Terrarium(seed=1)
+        planting = sim.add_planting("fittonia_mini", 5.0)
+        group = sim.add_animals("springtail", 30)
+        sim.seal()
+        manager = SurvivalManager()
+        bottle = manager.register(sim)
+        sim.state.tick = 24
+        planting.growth_stage = "reproductive"
+        planting.reproduction_progress = 76.0
+        planting.new_growth_count = 4
+        group.population_trend = "reproducing"
+        group.visible_activity = 72.0
+
+        messages = manager._messages_for_step(bottle)
+
+        daily_messages = [message for message in messages if " - DAILY: " in message]
+        self.assertEqual(1, len(daily_messages))
+        daily = daily_messages[0]
+        self.assertIn("plant changes:", daily)
+        self.assertIn("new growth points", daily)
+        self.assertIn("animal changes:", daily)
+        self.assertIn("tiny young", daily)
+        self.assertNotIn("growth_rate", daily)
+        self.assertNotIn("repro", daily)
+        self.assertNotIn("%", daily)
+
+    def test_daily_summary_lists_every_living_group_without_more_stub(self) -> None:
+        sim = Terrarium(seed=1)
+        sim.add_planting("fittonia_mini", 5.0, "surface", 35.0, 36.0)
+        sim.add_planting("fittonia_white", 5.0, "surface", 58.0, 38.0)
+        dead_planting = sim.add_planting("cushion_moss", 7.0, "surface", 45.0, 68.0)
+        sim.add_animals("springtail", 30, "soil", 48.0, 52.0)
+        dead_group = sim.add_animals("dwarf_white_isopod", 6, "leaf_litter", 56.0, 56.0)
+        sim.seal()
+        manager = SurvivalManager()
+        bottle = manager.register(sim)
+        sim.state.tick = 24
+        dead_planting.survival_state = "dead"
+        dead_planting.status = "dead"
+        dead_group.count = 0
+        dead_group.survival_state = "dead"
+
+        messages = manager._messages_for_step(bottle)
+
+        daily_messages = [message for message in messages if " - DAILY: " in message]
+        self.assertEqual(1, len(daily_messages))
+        daily = daily_messages[0]
+        self.assertIn("Mini fittonia", daily)
+        self.assertIn("White nerve plant", daily)
+        self.assertIn("Cushion moss", daily)
+        self.assertIn("Springtail colony", daily)
+        self.assertIn("Dwarf white isopod", daily)
+        self.assertIn("no living tissue remains", daily)
+        self.assertIn("no visible movement remains", daily)
+        self.assertNotIn("+", daily)
+        self.assertNotIn("more plantings", daily)
+        self.assertNotIn("more groups", daily)
 
     def test_survival_manager_life_state_messages_are_descriptive_and_cooled(self) -> None:
         sim = Terrarium(seed=1)
