@@ -7,17 +7,12 @@ $Root = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")
 
 Push-Location $Root
 try {
-    & $Python -m pip install --upgrade pyinstaller
-    & $Python -m PyInstaller `
-        --onefile `
-        --console `
-        --name terrarium `
-        --clean `
-        packaging\terrarium_launcher.py
+    & $Python -m pip install --upgrade ".[bundle]"
+    & $Python scripts\build-release.py --platform-label windows-x64
 
     Write-Host ""
-    Write-Host "Built standalone game executable:"
-    Write-Host "  $Root\dist\terrarium.exe"
+    Write-Host "Built standalone Windows game package:"
+    Write-Host "  $Root\dist\release\terrarium-sim-*-windows-x64.zip"
 }
 finally {
     Pop-Location

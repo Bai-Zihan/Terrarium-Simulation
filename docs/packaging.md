@@ -41,15 +41,60 @@ From the project root:
 .\scripts\build-windows-exe.ps1
 ```
 
-The output is:
+The script installs the bundle dependencies, builds the executable, and writes a
+release zip. The output is:
 
 ```text
-dist\terrarium.exe
+dist\release\terrarium-sim-0.1.0-windows-x64.zip
 ```
 
-That executable can be distributed as the terminal game. The launcher in
+The zip contains `terrarium.exe`, the README, and the user guides. The launcher in
 `packaging\terrarium_launcher.py` exists so PyInstaller can start the package
 through the normal `terrarium.cli:main` entry point.
+
+## Cross-platform release builds
+
+GitHub Actions builds release packages on native runners for each target system.
+This matters because PyInstaller packages should be built on the operating
+system they will run on.
+
+The workflow is:
+
+```text
+.github/workflows/build-release.yml
+```
+
+When a GitHub release is published, the workflow builds and attaches these
+assets to the release:
+
+```text
+terrarium-sim-<tag>-windows-x64.zip
+terrarium-sim-<tag>-macos-x64.zip
+terrarium-sim-<tag>-macos-arm64.zip
+terrarium-sim-<tag>-linux-x64.zip
+```
+
+The macOS x64 package is for Intel Macs. The macOS arm64 package is for Apple
+Silicon Macs.
+
+You can also run the workflow manually from the Actions tab. Manual runs upload
+the zips as workflow artifacts. Release-published runs also attach the zips to
+the GitHub release.
+
+## Release asset contents
+
+Each release zip contains:
+
+```text
+terrarium / terrarium.exe
+README.md
+docs/user-guide.zh-CN.md
+docs/user-guide.en.md
+docs/packaging.md
+```
+
+Do not attach local save files such as `game.json`, `test_bottle.json`, or other
+personal bottle exports to public releases.
 
 ## Python package entry
 

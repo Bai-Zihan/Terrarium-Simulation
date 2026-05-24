@@ -12,6 +12,11 @@ htmlcov/
 venv/
 env/
 
+build/
+dist/
+*.spec
+*.egg-info/
+
 *.jsonl
 state.json
 sim.jsonl
