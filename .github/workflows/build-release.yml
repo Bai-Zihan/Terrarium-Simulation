@@ -7,8 +7,12 @@ on:
         description: "Version or label for artifact names"
         required: false
         default: "dev"
+      release_tag:
+        description: "Optional existing GitHub release tag to attach packages to"
+        required: false
+        default: ""
   release:
-    types: [published]
+    types: [published, edited]
 
 permissions:
   contents: write
@@ -51,6 +55,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.release_tag }}" ]; then
+            echo "value=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
           else
             echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           fi
@@ -66,8 +72,8 @@ jobs:
           if-no-files-found: error
 
       - name: Attach package to GitHub release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.release_tag != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/release/*.zip --clobber
+        run: gh release upload "${{ steps.version.outputs.value }}" dist/release/*.zip --clobber

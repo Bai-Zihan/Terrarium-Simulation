@@ -78,8 +78,16 @@ The macOS x64 package is for Intel Macs. The macOS arm64 package is for Apple
 Silicon Macs.
 
 You can also run the workflow manually from the Actions tab. Manual runs upload
-the zips as workflow artifacts. Release-published runs also attach the zips to
-the GitHub release.
+the zips as workflow artifacts. If you want a manual run to attach assets to an
+existing release, fill the `release_tag` input with that release tag, for
+example:
+
+```text
+v0.1.0-cli
+```
+
+Release-published or release-edited runs also attach the zips to the GitHub
+release.
 
 ## Release asset contents
 
